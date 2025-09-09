@@ -1,6 +1,10 @@
-name: Post welcome comment
+name: example-01
 on:
   pull_request:
     types: [opened]
 permissions:
   pull-requests: write
+jobs:
+  build:
+    name: job-01
+    runs-on: ubuntu-latest
