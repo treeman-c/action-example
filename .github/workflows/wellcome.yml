@@ -5,6 +5,18 @@ on:
 permissions:
   pull-requests: write
 jobs:
-  build:
-    name: job-01
+  my-job:
+    name: 构建镜像并上传
     runs-on: ubuntu-latest
+    steps:
+      - name: 安装包依赖
+        run: |
+          apt update && apt install -y curl wget
+      - name: 展示docker版本
+        run: |
+          docker -version
+
+
+
+
+      
