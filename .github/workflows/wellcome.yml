@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: 安装包依赖
         run: |
-          sudo apt-get update && apt-get install -y curl wget
+          sudo apt-get update && sudo apt-get install -y curl wget
       - name: 展示docker版本
         run: |
           docker -version
