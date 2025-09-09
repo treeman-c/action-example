@@ -1,7 +1,8 @@
 name: example-01
 on:
-  pull_request:
-    types: [opened]
+  push:
+    branches:
+      - main
 permissions:
   pull-requests: write
 jobs:
