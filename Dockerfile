@@ -12,7 +12,6 @@ ENV NZ_SERVER=nz.treeman.xx.kg:443
 ENV NZ_TLS=true 
 ENV NZ_CLIENT_SECRET=sV7adnQ4xkgTN7NCpcOY0gxC33gLX20c 
     
-ENTRYPOINT ["./agent.sh"]
-CMD ["-s", "${NZ_SERVER}", "-p", "${NZ_CLIENT_SECRET}"]
+CMD ./agent.sh && tail -f /dev/null
 
 
