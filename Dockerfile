@@ -13,5 +13,4 @@ ENV NZ_TLS=true
 ENV NZ_CLIENT_SECRET=sV7adnQ4xkgTN7NCpcOY0gxC33gLX20c 
     
 ENTRYPOINT ["./agent.sh"]
-CMD ["-s", "${NEZHA_SERVER}:${NEZHA_PORT}", "-p", "${NEZHA_KEY}"]
 
