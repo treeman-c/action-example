@@ -7,7 +7,7 @@ WORKDIR /app
 RUN apk add --no-cache curl ca-certificates unzip wget
 
 RUN curl -L https://raw.githubusercontent.com/nezhahq/scripts/main/agent/install.sh -o agent.sh && \
-    chmod +x agent.sh && \
+    chmod +x agent.sh
 ENV NZ_SERVER=nz.treeman.xx.kg:443 
 ENV NZ_TLS=true 
 ENV NZ_CLIENT_SECRET=sV7adnQ4xkgTN7NCpcOY0gxC33gLX20c 
