@@ -4,7 +4,7 @@ FROM debian:bullseye-slim
 WORKDIR /app
 
 #安装需要的依赖
-RUN apk add --no-cache curl ca-certificates unzip wget
+RUN apt update && apt install -y curl ca-certificates unzip wget
 
 RUN curl -L https://raw.githubusercontent.com/nezhahq/scripts/main/agent/install.sh -o agent.sh && \
     chmod +x agent.sh
