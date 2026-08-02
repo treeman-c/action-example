@@ -140,7 +140,6 @@ setup_cron_backup() {
   mkdir -p /etc/crontabs
   local cron_file="/etc/crontabs/root"
   local cron_log="${DATA_DIR}/backup_cron.log"
-  local interval_min="${BACKUP_INTERVAL_MINUTES:-5}"
   touch "$cron_file" "$cron_log"
 
   # 去重：清掉我们自己之前可能写过的旧条目，避免重复追加
@@ -154,7 +153,7 @@ setup_cron_backup() {
     echo "SUB_NAME=${SUB_NAME:-main}"
     echo "DATA_DIR=${DATA_DIR}"
     echo "PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
-    echo "*/${interval_min} * * * * /usr/local/bin/backup.sh >> ${cron_log} 2>&1"
+    echo "* */2 * * * /usr/local/bin/backup.sh >> ${cron_log} 2>&1"
   } >> "$cron_file"
 
   if ! command -v crond >/dev/null 2>&1; then
@@ -169,7 +168,7 @@ setup_cron_backup() {
     log "crond 已在运行，无需重复启动"
   fi
 
-  log "已写入定时备份任务到 ${cron_file}（每 ${interval_min} 分钟执行一次，与 NO_AUTO_RENEW 无关）"
+  log "已写入定时备份任务到 ${cron_file}（每 2小时 执行一次，与 NO_AUTO_RENEW 无关）"
 
   # 容器刚启动时先立即做一次备份，不用等第一个 cron 周期，
   # 缩短"重新部署窗口内数据还没落盘"的风险
