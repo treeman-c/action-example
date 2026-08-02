@@ -8,7 +8,7 @@ FROM ghcr.io/komari-monitor/komari:latest
 # 官方镜像基于 alpine，这里补充运行所需工具
 # bash: 运行控制脚本 / curl+ca-certificates: 下载 cloudflared / git+openssh-client: GitHub 备份
 # sqlite: 校验数据库文件 / tzdata: 时区
-RUN apk add --no-cache bash curl ca-certificates git openssh-client sqlite tzdata jq \
+RUN apk add --no-cache bash curl cron ca-certificates git openssh-client sqlite tzdata jq \
     && rm -rf /var/cache/apk/*
 
 ENV TZ=Asia/Shanghai \
