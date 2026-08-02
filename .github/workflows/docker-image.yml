@@ -6,7 +6,10 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'docker/**'
+      - 'Dockerfile'
+      - 'entrypoint.sh'
+      - 'backup.sh'
+      - 'restore.sh'
       - '.github/workflows/build-image.yml'
   workflow_dispatch: {}
   schedule:
@@ -28,6 +31,16 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Debug - show repo structure
+        run: |
+          echo "当前仓库文件结构："
+          find . -maxdepth 3 -not -path '*/.git/*' | sort
+          echo "---"
+          if [ ! -f "./Dockerfile" ]; then
+            echo "::error::找不到根目录下的 Dockerfile，请确认 Dockerfile 直接放在仓库根目录"
+            exit 1
+          fi
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -55,8 +68,8 @@ jobs:
       - name: Build and push
         uses: docker/build-push-action@v6
         with:
-          context: ./docker
-          file: ./docker/Dockerfile
+          context: .
+          file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
