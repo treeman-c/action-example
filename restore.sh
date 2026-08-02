@@ -1,47 +1,38 @@
 #!/usr/bin/env bash
 # 容器启动时从 GH_REPO 拉取历史 komari 数据，实现无状态平台上的数据持久化
+# 与 backup.sh 保持一致：数据直接存放在仓库根目录（而非 data/ 子目录）
 set -uo pipefail
 
 DATA_DIR="${DATA_DIR:-/app/data}"
 RESTORE_DIR="/tmp/komari-restore"
 BRANCH="${SUB_NAME:-main}"
 
-mkdir -p "$DATA_DIR"
-
-if [ -z "${GH_PAT:-}" ] || [ -z "${GH_REPO:-}" ]; then
-  echo "缺少 GH_PAT 或 GH_REPO 环境变量，跳过还原"
-  exit 0
+if [ -z "${GH_PAT:-}" ] || [ -z "${GH_REPO:-}" ] || [ -z "${GH_USER:-}" ]; then
+  exit 1
+fi
+if [[ "${GH_REPO}" != */* ]]; then
+  echo "GH_REPO='${GH_REPO}' 格式不对，必须是 '用户名/仓库名'"
+  exit 1
 fi
 
 rm -rf "$RESTORE_DIR"
-
-# 1. 带有 GH_PAT 鉴权拉取私有仓库
-echo "正在拉取备份仓库 ${GH_REPO}@${BRANCH}..."
-if ! git clone --depth 1 --branch "$BRANCH" "https://${GH_PAT}@github.com/${GH_REPO}.git" "$RESTORE_DIR" 2>/dev/null; then
+# 私有仓库需要带凭证才能 clone，和 backup.sh 保持一致
+if ! git clone --depth 1 --branch "$BRANCH" "https://${GH_USER}:${GH_PAT}@github.com/${GH_REPO}.git" "$RESTORE_DIR" 2>/dev/null; then
   echo "远程仓库/分支不存在，视为首次部署"
-  exit 0
+  exit 1
 fi
 
-# 2. 全量还原仓库中的所有文件和文件夹到 /app/data/
-echo "开始还原历史数据到 ${DATA_DIR}..."
-
-# 如果历史备份存放在仓库的 data/ 子目录下，兼容支持
-if [ -d "${RESTORE_DIR}/data" ]; then
-  cp -rf "${RESTORE_DIR}/data"/* "$DATA_DIR"/ 2>/dev/null || true
-  cp -rf "${RESTORE_DIR}/data"/.* "$DATA_DIR"/ 2>/dev/null || true
+# 校验是否为 komari-backup-markup 标记的备份（避免误还原一个无关仓库）
+if [ ! -f "${RESTORE_DIR}/komari-backup-markup" ]; then
+  echo "远程仓库中未找到备份标记 komari-backup-markup，跳过还原"
+  exit 1
 fi
 
-# 还原仓库根目录下的全量备份文件（排除 .git 目录和 . / .. 指针）
-find "$RESTORE_DIR" -maxdepth 1 ! -name "." ! -name ".." ! -name ".git" -exec cp -rf {} "$DATA_DIR"/ \;
+# 把仓库根目录下的所有文件（除 .git 外）还原到 DATA_DIR
+find "$RESTORE_DIR" -mindepth 1 -maxdepth 1 ! -name ".git" -exec cp -rf {} "$DATA_DIR"/ \;
 
-# 3. 补全双向兼容软链接 (komari.db <-> data.db)，防止不同版本文件名不匹配
-if [ -f "${DATA_DIR}/komari.db" ] && [ ! -f "${DATA_DIR}/data.db" ]; then
-  ln -s "${DATA_DIR}/komari.db" "${DATA_DIR}/data.db" || true
-elif [ -f "${DATA_DIR}/data.db" ] && [ ! -f "${DATA_DIR}/komari.db" ]; then
-  ln -s "${DATA_DIR}/data.db" "${DATA_DIR}/komari.db" || true
-fi
+# 清理还原回来的嵌套 .git 目录，避免历史遗留的内嵌仓库反复循环
+find "$DATA_DIR" -mindepth 1 -name ".git" -exec rm -rf {} + 2>/dev/null || true
 
-# 4. 清理临时目录
-rm -rf "$RESTORE_DIR"
-echo "历史数据还原成功！"
+echo "历史数据已还原"
 exit 0
