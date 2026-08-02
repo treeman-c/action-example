@@ -9,30 +9,46 @@
 > `docker run -e ...` 或平台的"环境变量/Secret"功能注入，
 > 不要写进 Dockerfile、workflow 文件或提交到仓库里。
 
-## 目录结构
+## 目录结构（文件直接放在仓库根目录）
 
 ```
 .
 ├── .github/workflows/build-image.yml   # 构建并推送镜像的 Action
-├── docker/
-│   ├── Dockerfile
-│   ├── entrypoint.sh
-│   ├── backup.sh
-│   └── restore.sh
+├── Dockerfile
+├── entrypoint.sh
+├── backup.sh
+├── restore.sh
 └── README.md
 ```
 
-## 构建镜像需要的 GitHub Secrets（仓库级，与运行参数无关）
+## 构建镜像（推送到 GHCR，无需额外配置 Secret）
 
-在你 fork/新建的 GitHub 仓库 `Settings -> Secrets and variables -> Actions` 添加：
+workflow 直接使用仓库自带的 `GITHUB_TOKEN` 登录 GHCR（GitHub Container Registry），
+**不需要**手动创建任何 Docker Hub 相关 Secret。
 
-| Secret | 说明 |
-|---|---|
-| `DOCKERHUB_USERNAME` | Docker Hub 用户名 |
-| `DOCKERHUB_TOKEN` | Docker Hub Access Token（不是密码） |
+配置好后 push 到 `main` 分支（改动 `docker/` 目录下的文件）或手动触发 workflow，
+镜像会推送到：
 
-配置好后 push 到 `main` 分支或手动触发 workflow，即可在
-`docker.io/<你的用户名>/komari-argo:latest` 得到镜像。
+```
+ghcr.io/<你的 GitHub 用户名或组织名>/komari-argo:latest
+```
+
+### 让镜像可以被 `docker pull` 拉取（重要）
+
+GHCR 里新建的包**默认是 Private**，即使 workflow 跑成功了，别人（甚至你自己在
+另一台机器上不登录的情况下）也拉不下来。第一次构建成功后需要手动改一次可见性：
+
+1. 打开 `https://github.com/<你的用户名>?tab=packages`，找到 `komari-argo` 这个包
+2. 进入包详情页 → 右侧 **Package settings**
+3. 拉到最下面 **Danger Zone** → **Change visibility** → 选 **Public**（或者保持
+   Private，然后在拉取的机器上先 `docker login ghcr.io` 用你的 GitHub 用户名 +
+   一个有 `read:packages` 权限的 Personal Access Token 登录）
+
+### 拉取镜像
+
+```bash
+docker pull ghcr.io/<你的用户名>/komari-argo:latest
+```
 
 ## 运行参数（对应 daxia2023/nezv1 的参数体系）
 
@@ -73,7 +89,7 @@ docker run -d \
   -e SUB_NAME='my-node' \
   -e UUID='xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx' \
   -v $(pwd)/data:/app/data \
-  你的用户名/komari-argo:latest
+  ghcr.io/你的用户名/komari-argo:latest
 ```
 
 首次启动后查看日志获取初始管理员账号密码（若未通过 `DASH_TOKEN`/`GH_USER` 指定）：
