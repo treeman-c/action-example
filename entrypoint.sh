@@ -95,22 +95,51 @@ setup_git_persistence() {
   # 无论是否为空，再次确保关键的备份标识文件存在
   touch "${DATA_DIR}/komari-backup-markup"
 }
-
-start_backup_loop() {
+setup_cron_backup() {
   if [ -n "${NO_AUTO_RENEW:-}" ] && [ "${NO_AUTO_RENEW}" = "1" ]; then
     log "NO_AUTO_RENEW=1，关闭自动定时备份"
     return 0
   fi
-  if [ -z "${GH_PAT:-}" ] || [ -z "${GH_REPO:-}" ]; then
+
+  if [ -z "${GH_PAT:-}" ] || [ -z "${GH_REPO:-}" ] || [ -z "${GH_USER:-}" ]; then
+    log "缺少 GH_USER / GH_PAT / GH_REPO，跳过配置 Cron 定时备份"
     return 0
   fi
-  (
-    while true; do
-      sleep 1800  # 每 30 分钟备份一次
-      /usr/local/bin/backup.sh || log "备份失败，将在下个周期重试"
-    done
-  ) &
-  log "已启动后台自动备份循环 (间隔 1800s)"
+
+  # 1. 确保日志文件存在
+  mkdir -p "${DATA_DIR:-/app/data}"
+  CRON_LOG="${DATA_DIR:-/app/data}/backup_cron.log"
+  touch "$CRON_LOG"
+
+  # 2. 将环境变量和定时任务写入 cron 配置文件
+  # 注意：必须把环境变量显式注入到 crontab 中，否则 cron 执行时找不到变量！
+  cat <<EOF > /etc/cron.d/komari-backup
+  GH_PAT="${GH_PAT}"
+  GH_REPO="${GH_REPO}"
+  GH_USER="${GH_USER}"
+  SUB_NAME="${SUB_NAME:-main}"
+  DATA_DIR="${DATA_DIR:-/app/data}"
+  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+  
+  # 每 30 分钟执行一次备份，并记录日志
+  */30 * * * * root /usr/local/bin/backup.sh >> ${CRON_LOG} 2>&1
+  EOF
+
+  # 3. 设置严格的配置文件权限 (crontab 安全要求)
+  chmod 0644 /etc/cron.d/komari-backup
+
+  # 4. 启动 cron 守护进程
+  # 兼容 Alpine (crond) 和 Debian/Ubuntu (cron)
+  if command -v cron >/dev/null 2>&1; then
+    cron
+  elif command -v crond >/dev/null 2>&1; then
+    crond -b
+  else
+    log "错误: 容器内未安装 cron/crond 工具，请在 Dockerfile 中安装 cron"
+    return 1
+  fi
+
+  log "已成功启动 Cron 定时备份 (每 30 分钟执行)"
 }
 
 # ---------------------------------------------------------
@@ -120,9 +149,11 @@ export ADMIN_USERNAME="${GH_USER:-admin}"
 if [ -n "${DASH_TOKEN:-}" ]; then
   export ADMIN_PASSWORD="${DASH_TOKEN}"
 fi
+
 if [ -n "${API_TOKEN:-}" ]; then
-  echo "${API_TOKEN}" > "${DATA_DIR}/.api_token"
-  log "已写入 API_TOKEN 到 ${DATA_DIR}/.api_token"
+  mkdir -p "${DATA_DIR:-/app/data}"
+  echo "${API_TOKEN}" > "${DATA_DIR:-/app/data}/.api_token"
+  log "已写入 API_TOKEN 到 ${DATA_DIR:-/app/data}/.api_token"
 fi
 
 if [ -n "${GH_CLIENTID:-}" ]; then
