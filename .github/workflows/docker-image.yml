@@ -1,4 +1,4 @@
-name: Build and Push komari-argo image
+name: Build and Push komari-argo image (GHCR)
 
 # 触发方式：推送到 main 分支的 docker/ 目录变化时自动构建；
 # 也支持手动触发 (workflow_dispatch)
@@ -14,15 +14,16 @@ on:
     - cron: '0 18 * * 0'
 
 env:
-  # 按需修改为你自己的 Docker Hub 命名空间/镜像名
-  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/komari-argo
+  # 镜像会推送到 ghcr.io/<你的GitHub用户名或组织名>/komari-argo
+  REGISTRY: ghcr.io
+  IMAGE_NAME: ${{ github.repository_owner }}/komari-argo
 
 jobs:
   build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      packages: write
+      packages: write   # 推送到 GHCR 必须要有这个权限
 
     steps:
       - name: Checkout
@@ -34,26 +35,19 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Log in to Docker Hub
+      # GHCR 直接用仓库自带的 GITHUB_TOKEN 登录，不需要额外创建任何 Secret
+      - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      # 如果你更想推送到 GitHub Container Registry，改用下面这段并把
-      # IMAGE_NAME 换成 ghcr.io/<owner>/komari-argo，去掉 Docker Hub 登录步骤
-      # - name: Log in to GHCR
-      #   uses: docker/login-action@v3
-      #   with:
-      #     registry: ghcr.io
-      #     username: ${{ github.actor }}
-      #     password: ${{ secrets.GITHUB_TOKEN }}
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
           tags: |
             type=raw,value=latest
             type=sha,format=short
@@ -62,7 +56,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./docker
-          file: ./Dockerfile
+          file: ./docker/Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
           tags: ${{ steps.meta.outputs.tags }}
