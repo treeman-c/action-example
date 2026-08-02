@@ -114,15 +114,15 @@ setup_cron_backup() {
   # 2. 将环境变量和定时任务写入 cron 配置文件
   # 注意：必须把环境变量显式注入到 crontab 中，否则 cron 执行时找不到变量！
   cat <<EOF > /etc/cron.d/komari-backup
-  GH_PAT="${GH_PAT}"
-  GH_REPO="${GH_REPO}"
-  GH_USER="${GH_USER}"
-  SUB_NAME="${SUB_NAME:-main}"
-  DATA_DIR="${DATA_DIR:-/app/data}"
-  PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-  
-  # 每 30 分钟执行一次备份，并记录日志
-  */30 * * * * root /usr/local/bin/backup.sh >> ${CRON_LOG} 2>&1
+    GH_PAT="${GH_PAT}"
+    GH_REPO="${GH_REPO}"
+    GH_USER="${GH_USER}"
+    SUB_NAME="${SUB_NAME:-main}"
+    DATA_DIR="${DATA_DIR:-/app/data}"
+    PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+    
+    # 每 30 分钟执行一次备份，并记录日志
+    */30 * * * * root /usr/local/bin/backup.sh >> ${CRON_LOG} 2>&1
   EOF
 
   # 3. 设置严格的配置文件权限 (crontab 安全要求)
@@ -214,7 +214,7 @@ EOF
 setup_git_persistence
 start_komari
 start_argo
-start_backup_loop
+setup_cron_backup
 
 # ---------------------------------------------------------
 # 优雅退出：容器停止前做最后一次备份
