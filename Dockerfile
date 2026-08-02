@@ -1,26 +1,31 @@
-FROM alpine:3.20
+# =========================================================
+# komari + Argo Tunnel + GitHub 持久化备份 一体化镜像
+# 基于官方 komari 镜像叠加：cloudflared 隧道 / git 备份还原
+# 参数体系仿照 daxia2023/nezv1 (哪吒探针+Argo 常见模式) 迁移到 komari
+# =========================================================
+FROM ghcr.io/komari-monitor/komari:latest
 
-ARG TARGETARCH
+# 官方镜像基于 alpine，这里补充运行所需工具
+# bash: 运行控制脚本 / curl+ca-certificates: 下载 cloudflared / git+openssh-client: GitHub 备份
+# sqlite: 校验数据库文件 / tzdata: 时区
+RUN apk add --no-cache bash curl ca-certificates git openssh-client sqlite tzdata jq \
+    && rm -rf /var/cache/apk/*
+
+ENV TZ=Asia/Shanghai \
+    KOMARI_PORT=25774 \
+    WORK_DIR=/app \
+    DATA_DIR=/app/data \
+    CLOUDFLARED_BIN=/usr/local/bin/cloudflared
 
 WORKDIR /app
 
-RUN apk add --no-cache \
-    bash curl wget git tar tzdata ca-certificates dos2unix jq dcron openssl coreutils
-
-# cloudflared + komari
-RUN if [ "$TARGETARCH" = "arm64" ]; then ARCH="arm64"; else ARCH="amd64"; fi && \
-    wget -O /usr/local/bin/cloudflared \
-      https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${ARCH} && \
-    wget -O /usr/local/bin/komari \
-      https://github.com/komari-monitor/komari/releases/latest/download/komari-linux-${ARCH} && \
-    chmod +x /usr/local/bin/cloudflared /usr/local/bin/komari
-
+# 拷贝控制脚本
 COPY entrypoint.sh /entrypoint.sh
-COPY backup.sh /backup.sh
+COPY backup.sh /usr/local/bin/backup.sh
+COPY restore.sh /usr/local/bin/restore.sh
 
-RUN dos2unix /entrypoint.sh /backup.sh && \
-    chmod +x /entrypoint.sh /backup.sh
+RUN chmod +x /entrypoint.sh /usr/local/bin/backup.sh /usr/local/bin/restore.sh
 
 EXPOSE 25774
 
-ENTRYPOINT ["/bin/bash", "/entrypoint.sh"]
+ENTRYPOINT ["/entrypoint.sh"]
