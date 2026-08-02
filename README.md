@@ -1,7 +1,7 @@
 # komari-argo
 
-基于官方 `ghcr.io/komari-monitor/komari` 镜像叠加 Cloudflare Argo Tunnel + GitHub
-数据持久化的一体化探针面板镜像，参数体系参照 `daxia2023/nezv1` 一类镜像的常见约定。
+基于官方 `ghcr.io/komari-monitor/komari` 镜像叠加 Cloudflare Argo Tunnel + GitHub仓库备份
+数据持久化的一体化探针面板镜像
 
 > 重要：本仓库里的 GitHub Action **只负责构建并推送镜像**（CI/CD），
 > 不在 Actions 里运行服务本身。所有敏感参数（ARGO_AUTH / GH_PAT / DASH_TOKEN 等）
@@ -50,14 +50,12 @@ GHCR 里新建的包**默认是 Private**，即使 workflow 跑成功了，别�
 docker pull ghcr.io/<你的用户名>/komari-argo:latest
 ```
 
-## 运行参数（对应 daxia2023/nezv1 的参数体系）
+## 运行参数
 
 | 变量 | 必填 | 说明 |
 |---|---|---|
-| `API_TOKEN` | 否 | 写入 `/app/data/.api_token`，用于对接 Agent 时核对/回填面板里的接入 Token |
 | `ARGO_AUTH` | 否 | Argo 隧道凭证。支持 **Token 字符串**（Cloudflare Zero Trust 远程管理隧道）或**隧道凭证 JSON**（`cloudflared tunnel create` 生成的 credentials 内容），二选一，留空则不启用隧道，仅本地监听 |
 | `ARGO_DOMAIN` | 否（配 ARGO_AUTH 时建议填） | 对外访问域名，例如 `nz.treeman.xx.kg` |
-| `CF_IP` | 否 | GitHub 下载加速反代域名，例如 `cdn.814046.xyz`，用于加速拉取 cloudflared 等文件 |
 | `DASH_TOKEN` | 否 | 映射为面板管理员密码 `ADMIN_PASSWORD` |
 | `GH_CLIENTID` / `GH_CLIENTSECRET` | 否 | GitHub OAuth App 凭证，透传为 `OAUTH_CLIENT_ID` / `OAUTH_CLIENT_SECRET`（取决于所用 komari 版本是否已支持三方登录） |
 | `GH_EMAIL` | 否 | 提交备份 commit 用的 git 邮箱 |
@@ -108,9 +106,6 @@ docker logs komari-argo
    在本地生成的 credentials JSON 内容整体填入 `ARGO_AUTH`，容器会自动生成
    `config.yml` 并把 `ARGO_DOMAIN` 路由到本地端口。
 
-## 安全提示
+## 提示
 
-- `GH_PAT` 建议使用 Fine-grained token，只授予目标备份仓库的读写权限。
-- `GH_REPO` 用于存放面板数据库，**务必设为私有仓库**，其中可能包含服务器信息、
-  管理员凭证等敏感数据。
-- 不要把 `ARGO_AUTH` / `GH_PAT` / `DASH_TOKEN` 写进 Dockerfile 或提交到 git 历史中。
+- 'koyeb'平台建议端口开放25774，健康检查才不会杀掉容器
