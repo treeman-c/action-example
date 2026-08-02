@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# 将 /app/data 下的 komari 数据备份到 GH_REPO（私有仓库建议）
+# 全量备份 /app/data 下的所有文件和子目录到 GitHub 仓库
 set -uo pipefail
 
 DATA_DIR="${DATA_DIR:-/app/data}"
@@ -15,7 +15,7 @@ rm -rf "$BACKUP_DIR"
 if git clone --depth 1 --branch "$BRANCH" "https://${GH_USER}:${GH_PAT}@github.com/${GH_REPO}.git" "$BACKUP_DIR" 2>/dev/null; then
   :
 else
-  # 分支不存在则初始化一个新仓库工作区
+  # 分支不存在则初始化新工作区
   mkdir -p "$BACKUP_DIR"
   cd "$BACKUP_DIR"
   git init -q
@@ -25,22 +25,18 @@ fi
 
 cd "$BACKUP_DIR"
 
-# 1. 自动生成 Komari 官方所需的备份标识文件
+# 1. 生成 Komari 官方还原识别标记
 touch komari-backup-markup
 
-# 2. 拷贝所有数据库文件（包含 .db, .db-wal, .db-shm）直接到备份根目录
-cp -f "${DATA_DIR}"/*.db* ./ 2>/dev/null || true
+# 2. 全量复制 /app/data 下的所有文件与文件夹（包含隐藏文件）到备份目录
+#    使用 find 排除 . 和 .. 避免报错
+find "$DATA_DIR" -maxdepth 1 ! -path "$DATA_DIR" -exec cp -rf {} ./ \;
 
-# 3. 拷贝其他重要配置文件与目录（隐藏文件、API token、主题等）
-[ -f "${DATA_DIR}/.instance_uuid" ] && cp -f "${DATA_DIR}/.instance_uuid" ./
-[ -f "${DATA_DIR}/.api_token" ] && cp -f "${DATA_DIR}/.api_token" ./
-[ -d "${DATA_DIR}/theme" ] && cp -rf "${DATA_DIR}/theme" ./ 2>/dev/null || true
-
-# 4. 写入元数据
+# 3. 写入元数据
 echo "${UUID:-unknown}" > UUID
 echo "$(date '+%F %T')" > last_backup.txt
 
-# 5. 提交并推送
+# 4. 检查差异并提交
 git add -A
 if git diff --cached --quiet; then
   echo "数据无变化，跳过提交"
@@ -49,4 +45,4 @@ fi
 
 git commit -q -m "backup: ${SUB_NAME:-komari} $(date '+%F %T')"
 git push -q -u origin "$BRANCH"
-echo "备份完成 -> ${GH_REPO}@${BRANCH}"
+echo "全量备份完成 -> ${GH_REPO}@${BRANCH}"
