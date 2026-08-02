@@ -12,6 +12,9 @@ CLOUDFLARED_BIN="${CLOUDFLARED_BIN:-/usr/local/bin/cloudflared}"
 
 mkdir -p "$DATA_DIR"
 
+# 确保预先生成 komari 官方校验所需的标识文件，防止备份包损坏/校验失败
+touch "${DATA_DIR}/komari-backup-markup"
+
 log() { echo -e "[$(date '+%F %T')] $*"; }
 
 # ---------------------------------------------------------
@@ -58,21 +61,39 @@ install_cloudflared() {
 }
 
 # ---------------------------------------------------------
-# 3. GitHub 数据持久化：启动前尝试还原，退出/定时时备份
-#    需要 GH_USER / GH_EMAIL / GH_PAT / GH_REPO
+# 3. GitHub 数据持久化：检查仓库是否非空，非空则下载，空则跳过
 # ---------------------------------------------------------
 setup_git_persistence() {
   if [ -z "${GH_PAT:-}" ] || [ -z "${GH_REPO:-}" ] || [ -z "${GH_USER:-}" ]; then
     log "未提供完整的 GH_USER/GH_PAT/GH_REPO，跳过 GitHub 持久化备份"
     return 0
   fi
+
   git config --global user.name "${GH_USER}"
   git config --global user.email "${GH_EMAIL:-${GH_USER}@users.noreply.github.com}"
   git config --global credential.helper store
   echo "https://${GH_USER}:${GH_PAT}@github.com" > ~/.git-credentials
 
-  log "尝试从 GH_REPO=${GH_REPO} 还原历史数据..."
-  /usr/local/bin/restore.sh || log "未找到可还原的历史数据，将使用全新数据启动"
+  local repo_url="https://github.com/${GH_REPO}.git"
+  log "检查远程备份仓库 ${GH_REPO} 状态..."
+
+  # 使用 ls-remote 探测远程仓库是否有 commit refs
+  local remote_refs
+  remote_refs=$(git ls-remote --heads "$repo_url" 2>/dev/null || true)
+
+  if [ -z "$remote_refs" ]; then
+    log "检测到 GitHub 备份仓库为空（无任何 Commit），跳过数据恢复，直接以全新的数据启动"
+  else
+    log "检测到 GitHub 备份仓库非空，准备下载并还原历史数据..."
+    if /usr/local/bin/restore.sh; then
+      log "历史数据还原成功！"
+    else
+      log "数据还原过程出现警告/异常，将继续以当前数据启动"
+    fi
+  fi
+
+  # 无论是否为空，再次确保关键的备份标识文件存在
+  touch "${DATA_DIR}/komari-backup-markup"
 }
 
 start_backup_loop() {
@@ -94,8 +115,6 @@ start_backup_loop() {
 
 # ---------------------------------------------------------
 # 4. komari 面板账号/令牌映射
-#    DASH_TOKEN -> ADMIN_PASSWORD（面板登录密码）
-#    API_TOKEN  -> 落盘，供对接 Agent 时核对使用
 # ---------------------------------------------------------
 export ADMIN_USERNAME="${GH_USER:-admin}"
 if [ -n "${DASH_TOKEN:-}" ]; then
@@ -103,10 +122,9 @@ if [ -n "${DASH_TOKEN:-}" ]; then
 fi
 if [ -n "${API_TOKEN:-}" ]; then
   echo "${API_TOKEN}" > "${DATA_DIR}/.api_token"
-  log "已写入 API_TOKEN 到 ${DATA_DIR}/.api_token（如面板暂不支持环境变量注入，请在管理后台核对/替换为该值）"
+  log "已写入 API_TOKEN 到 ${DATA_DIR}/.api_token"
 fi
 
-# GitHub OAuth 客户端信息（若 komari 版本已支持，将作为环境变量透传给主进程）
 if [ -n "${GH_CLIENTID:-}" ]; then
   export OAUTH_CLIENT_ID="${GH_CLIENTID}"
 fi
@@ -125,10 +143,6 @@ start_komari() {
 
 # ---------------------------------------------------------
 # 6. 启动 Argo (cloudflared) 隧道
-#    ARGO_AUTH: 支持两种形式
-#      a) Cloudflare Zero Trust 远程管理隧道的 Token（一段较长字符串）
-#      b) 隧道凭证 JSON（tunnel credentials-file 内容）
-#    ARGO_DOMAIN: 对外域名，例如 nz.treeman.xx.kg
 # ---------------------------------------------------------
 start_argo() {
   if [ -z "${ARGO_AUTH:-}" ]; then
@@ -138,7 +152,6 @@ start_argo() {
 
   install_cloudflared || { log "cloudflared 安装失败"; return 1; }
 
-  # 判断 ARGO_AUTH 是否为 JSON（隧道凭证），否则按 Token 模式处理
   if echo "${ARGO_AUTH}" | jq -e . >/dev/null 2>&1; then
     log "检测到 ARGO_AUTH 为 JSON 凭证，使用具名隧道 + 自定义 ingress 模式"
     mkdir -p /etc/cloudflared
@@ -157,7 +170,7 @@ EOF
     "$CLOUDFLARED_BIN" tunnel --config /etc/cloudflared/config.yml run &
     ARGO_PID=$!
   else
-    log "检测到 ARGO_AUTH 为 Token 模式，使用远程管理隧道（域名路由已在 Cloudflare 后台绑定 ${ARGO_DOMAIN}）"
+    log "检测到 ARGO_AUTH 为 Token 模式，使用远程管理隧道"
     "$CLOUDFLARED_BIN" tunnel run --token "${ARGO_AUTH}" &
     ARGO_PID=$!
   fi
@@ -178,6 +191,8 @@ start_backup_loop
 term_handler() {
   log "收到退出信号，执行最终备份..."
   if [ -n "${GH_PAT:-}" ] && [ -z "${NO_AUTO_RENEW:-}" ]; then
+    # 退出前确保标识文件在数据包中
+    touch "${DATA_DIR}/komari-backup-markup" 2>/dev/null || true
     /usr/local/bin/backup.sh || true
   fi
   [ -n "${ARGO_PID:-}" ] && kill "$ARGO_PID" 2>/dev/null
